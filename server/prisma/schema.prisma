@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+enum Role {
+    USER
+    ADMIN
+    SUPPORT
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAW
+  BUY
+  SELL
+  LOCK
+  UNLOCK
+  FEE
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String
+
+  firstName  String?
+  lastName   String?
+
+  role       Role @default(USER)
+
+  wallet     Wallet?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balances  WalletBalance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Asset {
+  id          String   @id @default(cuid())
+
+  symbol      String   @unique
+  name        String
+  network     String
+
+  decimals    Int
+
+  isActive    Boolean  @default(true)
+
+  balances    WalletBalance[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WalletBalance {
+
+  id String @id @default(cuid())
+
+  walletId String
+  assetId String
+
+  available Decimal @db.Decimal(30,8)
+
+  locked Decimal @db.Decimal(30,8)
+
+  wallet Wallet @relation(fields:[walletId], references:[id])
+
+  asset Asset @relation(fields:[assetId], references:[id])
+
+  @@unique([walletId, assetId])
+}
+
+model Transaction {
+
+  id          String   @id @default(cuid())
+
+  walletId    String
+  assetId     String
+
+  type        TransactionType
+
+  status      TransactionStatus
+
+  amount      Decimal @db.Decimal(30,8)
+
+  referenceId String?
+
+  createdAt   DateTime @default(now())
+}
