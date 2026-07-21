@@ -5,10 +5,11 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
 enum Role {
-    USER
-    ADMIN
-    SUPPORT
+  USER
+  ADMIN
+  SUPPORT
 }
 
 enum TransactionStatus {
@@ -29,82 +30,280 @@ enum TransactionType {
   FEE
 }
 
-model User {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  password   String
-
-  firstName  String?
-  lastName   String?
-
-  role       Role @default(USER)
-
-  wallet     Wallet?
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+enum ReferenceType {
+  DEPOSIT
+  WITHDRAW
+  ORDER
+  TRADE
+  SYSTEM
 }
 
-model Wallet {
-  id        String   @id @default(cuid())
+enum OrderStatus {
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+}
 
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  balances  WalletBalance[]
+enum OrderType {
+  LIMIT
+  MARKET
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+model User {
+  id       String @id @default(cuid())
+  email    String @unique
+  password String
+
+  firstName String?
+  lastName  String?
+
+  role Role @default(USER)
+
+  wallet Wallet?
+  orders Order[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  buyTrades Trade[] @relation("BuyerTrades")
+
+  sellTrades Trade[] @relation("SellerTrades")
+}
+
+model Wallet {
+  id String @id @default(cuid())
+
+  userId   String          @unique
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balances WalletBalance[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders       Order[]
+  transactions Transaction[]
 }
 
 model Asset {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  symbol      String   @unique
-  name        String
-  network     String
+  // Basic Information
+  symbol   String @unique
+  name     String
+  network  String
+  decimals Int
 
-  decimals    Int
+  // Exchange Controls
+  isActive        Boolean @default(true)
+  tradingEnabled  Boolean @default(true)
+  depositEnabled  Boolean @default(true)
+  withdrawEnabled Boolean @default(true)
 
-  isActive    Boolean  @default(true)
+  // UI
+  displayOrder Int @default(0)
 
-  balances    WalletBalance[]
+  // Relations
+  balances     WalletBalance[]
+  basePairs    TradingPair[]   @relation("BaseAsset")
+  quotePairs   TradingPair[]   @relation("QuoteAsset")
+  transactions Transaction[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Indexes
+  @@index([symbol])
+  @@index([isActive])
+}
+
+model TradingPair {
+  id String @id @default(cuid())
+
+  // Base Asset (What you are buying/selling)
+  baseAssetId String
+
+  // Quote Asset (What you pay with)
+  quoteAssetId String
+
+  baseAsset Asset @relation("BaseAsset", fields: [baseAssetId], references: [id])
+
+  quoteAsset Asset @relation("QuoteAsset", fields: [quoteAssetId], references: [id])
+
+  // Market Information
+  symbol String @unique
+
+  isActive Boolean @default(true)
+
+  // Trading Rules
+  minOrderSize Decimal @db.Decimal(30, 8)
+
+  maxOrderSize Decimal @db.Decimal(30, 8)
+
+  pricePrecision Int
+
+  quantityPrecision Int
+
+  // Relations
+  orders Order[]
+  trades Trade[]
+
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([baseAssetId, quoteAssetId])
+  @@index([baseAssetId])
+  @@index([quoteAssetId])
 }
 
 model WalletBalance {
-
   id String @id @default(cuid())
 
   walletId String
-  assetId String
+  assetId  String
 
-  available Decimal @db.Decimal(30,8)
+  available Decimal @db.Decimal(30, 8)
 
-  locked Decimal @db.Decimal(30,8)
+  locked Decimal @db.Decimal(30, 8)
 
-  wallet Wallet @relation(fields:[walletId], references:[id])
+  wallet Wallet @relation(fields: [walletId], references: [id])
 
-  asset Asset @relation(fields:[assetId], references:[id])
+  asset Asset @relation(fields: [assetId], references: [id])
 
   @@unique([walletId, assetId])
 }
 
+model Order {
+  id String @id @default(cuid())
+
+  // Owner
+  userId   String
+  walletId String
+
+  // Market
+  tradingPairId String
+
+  // Order Details
+  side   OrderSide
+  type   OrderType
+  status OrderStatus
+
+  // Price
+  price Decimal @db.Decimal(30, 8)
+
+  // Total quantity user requested
+  quantity Decimal @db.Decimal(30, 8)
+
+  // Already executed
+  filledQuantity Decimal @default(0) @db.Decimal(30, 8)
+
+  // Still waiting to execute
+  remainingQuantity Decimal @db.Decimal(30, 8)
+
+  user User @relation(fields: [userId], references: [id])
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  buyTrades Trade[] @relation("BuyOrder")
+
+  sellTrades Trade[] @relation("SellOrder")
+
+  tradingPair TradingPair @relation(fields: [tradingPairId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([tradingPairId])
+  @@index([side])
+  @@index([price])
+  @@index([createdAt])
+}
+
 model Transaction {
+  id String @id @default(cuid())
 
-  id          String   @id @default(cuid())
+  // Relations
+  walletId String
+  assetId  String
 
-  walletId    String
-  assetId     String
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id])
 
-  type        TransactionType
+  // Transaction Details
+  type TransactionType
 
-  status      TransactionStatus
+  status TransactionStatus
 
-  amount      Decimal @db.Decimal(30,8)
+  amount Decimal @db.Decimal(30, 8)
+
+  // Audit Trail
+  balanceBefore Decimal @db.Decimal(30, 8)
+
+  balanceAfter Decimal @db.Decimal(30, 8)
+
+  // Reference
+  referenceType ReferenceType
 
   referenceId String?
 
-  createdAt   DateTime @default(now())
+  // Optional Description
+  description String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([walletId])
+  @@index([assetId])
+  @@index([status])
+  @@index([referenceId])
+}
+
+model Trade {
+  id String @id @default(cuid())
+
+  // Orders involved
+  buyOrderId  String
+  sellOrderId String
+
+  // Market
+  tradingPairId String
+
+  // Users
+  buyerId  String
+  sellerId String
+
+  // Execution Details
+  price Decimal @db.Decimal(30, 8)
+
+  quantity Decimal @db.Decimal(30, 8)
+
+  // Relations
+  buyOrder Order @relation("BuyOrder", fields: [buyOrderId], references: [id])
+
+  sellOrder Order @relation("SellOrder", fields: [sellOrderId], references: [id])
+
+  buyer User @relation("BuyerTrades", fields: [buyerId], references: [id])
+
+  seller User @relation("SellerTrades", fields: [sellerId], references: [id])
+
+  tradingPair TradingPair @relation(fields: [tradingPairId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([buyOrderId])
+  @@index([sellOrderId])
+  @@index([tradingPairId])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([createdAt])
 }
