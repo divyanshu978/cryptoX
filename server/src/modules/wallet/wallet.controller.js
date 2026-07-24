@@ -34,10 +34,32 @@ class WalletController {
             });
 
         } catch (error) {
-            
+
             next(error);
         }
     }
+
+    async withdraw(req, res, next) {
+    try {
+
+        const { symbol, amount } = req.body;
+
+        const result = await walletService.withdraw(
+            req.user.id,
+            symbol,
+            amount
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Withdrawal successful",
+            data: result
+        });
+
+    } catch (error) {
+        next(error);
+    }
+}
 }
 
 export default new WalletController();

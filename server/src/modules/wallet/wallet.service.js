@@ -88,8 +88,64 @@ class WalletService {
      * Withdraw funds
      */
     async withdraw(userId, symbol, amount) {
-        // Implement later
+
+    if (!amount || Number(amount) <= 0) {
+        throw new Error("Invalid amount");
     }
+
+    const wallet = await walletRepository.findWalletByUserId(userId);
+
+    if (!wallet) {
+        throw new Error("Wallet not found");
+    }
+
+    const asset = await walletRepository.findAssetBySymbol(symbol);
+
+    if (!asset) {
+        throw new Error("Asset not found");
+    }
+
+    return prisma.$transaction(async (tx) => {
+
+        const previousBalance = await this.getBalance(
+            tx,
+            wallet.id,
+            asset.id
+        );
+
+        const updatedBalance = await this.debitBalance(
+            tx,
+            wallet.id,
+            asset.id,
+            amount
+        );
+
+        await walletRepository.createTransaction(tx, {
+            walletId: wallet.id,
+            assetId: asset.id,
+
+            type: "WITHDRAW",
+            status: "SUCCESS",
+
+            amount: new Prisma.Decimal(amount),
+
+            balanceBefore: previousBalance.available,
+            balanceAfter: updatedBalance.available,
+
+            referenceType: "SYSTEM",
+
+            description: "Manual Withdrawal"
+        });
+
+        return {
+            asset: asset.symbol,
+            available: updatedBalance.available,
+            locked: updatedBalance.locked
+        };
+
+    });
+
+}
 
     /**
      * Get Wallet Balance
