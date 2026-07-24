@@ -1,8 +1,11 @@
-import { Router } from "express";
+import express from "express";
+import walletController from "./wallet.controller.js";
+import authenticate from "../../middleware/auth.middleware.js";
 
-const router = Router();
+const router = express.Router();
 
-router.post("/orders" , )
-router.get("/orders" , )
-router.get("/orders/:id" , )
-router.delete("/order/:id",)
+router.get("/", authenticate, OrderService.placeorder);
+router.post("/deposit",authenticate,walletController.deposit);
+router.post("/withdraw",authenticate , walletController.withdraw);
+
+export default router;
