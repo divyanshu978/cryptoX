@@ -4,15 +4,20 @@ class WalletRepository {
 
     async findWalletByUserId(userId) {
         return prisma.wallet.findUnique({
-            where: { userId }
+            where: { userId },
+            include: {
+                balances: {
+                    include: {
+                        asset: true
+                    }
+                }
+            }
         });
     }
 
     async findAssetBySymbol(symbol) {
         return prisma.asset.findUnique({
-            where: {
-                symbol
-            }
+            where: { symbol }
         });
     }
 
@@ -35,9 +40,7 @@ class WalletRepository {
 
     async updateWalletBalance(tx, id, data) {
         return tx.walletBalance.update({
-            where: {
-                id
-            },
+            where: { id },
             data
         });
     }

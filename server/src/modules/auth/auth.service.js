@@ -19,7 +19,7 @@ export const registerUser = async (userData) => {
         throw error;
     }
 
-    const hashedPass = await bcrypt.hash(password, SALT_ROUND);
+    const hashedPassword = await bcrypt.hash(password, SALT_ROUND);
 
     const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({

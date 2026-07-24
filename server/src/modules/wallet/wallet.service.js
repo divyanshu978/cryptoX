@@ -1,6 +1,11 @@
+import { Prisma } from "@prisma/client";
+import prisma from "../../config/prisma.js";
 import walletRepository from "./wallet.repository.js";
 
 class WalletService {
+    /**
+     * Get complete wallet with balances
+     */
     async getWallet(userId) {
         const wallet = await walletRepository.findWalletByUserId(userId);
 
@@ -20,10 +25,12 @@ class WalletService {
         };
     }
 
+    /**
+     * Deposit funds
+     */
     async deposit(userId, symbol, amount) {
-
         if (!amount || Number(amount) <= 0) {
-            throw new Error("Invalid deposit amount");
+            throw new Error("Invalid amount");
         }
 
         const wallet = await walletRepository.findWalletByUserId(userId);
@@ -39,49 +46,174 @@ class WalletService {
         }
 
         return prisma.$transaction(async (tx) => {
-
-        });
-
-        const walletBalance =
-            await walletRepository.findWalletBalance(
+            const previousBalance = await this.getOrCreateBalance(
                 tx,
                 wallet.id,
                 asset.id
             );
 
-        await walletRepository.updateWalletBalance(
-            tx,
-            walletBalance.id,
-            {
-                available: updatedAvailable
-            }
-        );
-        await walletRepository.createWalletBalance(
-            tx,
-            {
+            const updatedBalance = await this.creditBalance(
+                tx,
+                wallet.id,
+                asset.id,
+                amount
+            );
+
+            await walletRepository.createTransaction(tx, {
                 walletId: wallet.id,
                 assetId: asset.id,
-                available: new Prisma.Decimal(amount),
-                locked: new Prisma.Decimal(0)
-            }
-        );
-        await walletRepository.createTransaction(tx, {
-            walletId: wallet.id,
-            assetId: asset.id,
-            type: "DEPOSIT",
-            status: "SUCCESS",
-            amount: new Prisma.Decimal(amount),
-            balanceBefore: previousBalance,
-            balanceAfter: updatedBalance,
-            referenceType: "SYSTEM",
-            description: "Manual deposit"
+
+                type: "DEPOSIT",
+                status: "SUCCESS",
+
+                amount: new Prisma.Decimal(amount),
+
+                balanceBefore: previousBalance.available,
+                balanceAfter: updatedBalance.available,
+
+                referenceType: "SYSTEM",
+
+                description: "Manual Deposit",
+            });
+
+            return {
+                asset: asset.symbol,
+                available: updatedBalance.available,
+                locked: updatedBalance.locked,
+            };
         });
+    }
 
-        return {
-            asset: asset.symbol,
-            available: updatedBalance.toString()
-        };
+    /**
+     * Withdraw funds
+     */
+    async withdraw(userId, symbol, amount) {
+        // Implement later
+    }
 
+    /**
+     * Get Wallet Balance
+     */
+    async getBalance(tx, walletId, assetId) {
+        const balance = await walletRepository.findWalletBalance(
+            tx,
+            walletId,
+            assetId
+        );
+
+        if (!balance) {
+            throw new Error("Wallet balance not found");
+        }
+
+        return balance;
+    }
+
+    /**
+     * Get existing balance or create a new balance row
+     */
+    async getOrCreateBalance(tx, walletId, assetId) {
+        let balance = await walletRepository.findWalletBalance(
+            tx,
+            walletId,
+            assetId
+        );
+
+        if (!balance) {
+            balance = await walletRepository.createWalletBalance(tx, {
+                walletId,
+                assetId,
+                available: new Prisma.Decimal(0),
+                locked: new Prisma.Decimal(0),
+            });
+        }
+
+        return balance;
+    }
+
+    /**
+     * Increase available balance
+     */
+    async creditBalance(tx, walletId, assetId, amount) {
+        const balance = await this.getOrCreateBalance(
+            tx,
+            walletId,
+            assetId
+        );
+
+        const available = new Prisma.Decimal(balance.available).plus(amount);
+
+        return walletRepository.updateWalletBalance(tx, balance.id, {
+            available,
+        });
+    }
+
+    /**
+     * Decrease available balance
+     */
+    async debitBalance(tx, walletId, assetId, amount) {
+        const balance = await this.getBalance(
+            tx,
+            walletId,
+            assetId
+        );
+
+        if (balance.available.lessThan(amount)) {
+            throw new Error("Insufficient balance");
+        }
+
+        const available = new Prisma.Decimal(balance.available).minus(amount);
+
+        return walletRepository.updateWalletBalance(tx, balance.id, {
+            available,
+        });
+    }
+
+    /**
+     * Move funds from available -> locked
+     */
+    async lockBalance(tx, walletId, assetId, amount) {
+        const balance = await this.getBalance(
+            tx,
+            walletId,
+            assetId
+        );
+
+        if (balance.available.lessThan(amount)) {
+            throw new Error("Insufficient balance");
+        }
+
+        const available = new Prisma.Decimal(balance.available).minus(amount);
+
+        const locked = new Prisma.Decimal(balance.locked).plus(amount);
+
+        return walletRepository.updateWalletBalance(tx, balance.id, {
+            available,
+            locked,
+        });
+    }
+
+    /**
+     * Move funds from locked -> available
+     */
+    async unlockBalance(tx, walletId, assetId, amount) {
+        const balance = await this.getBalance(
+            tx,
+            walletId,
+            assetId
+        );
+
+        if (balance.locked.lessThan(amount)) {
+            throw new Error("Insufficient locked balance");
+        }
+
+        const available = new Prisma.Decimal(balance.available).plus(amount);
+
+        const locked = new Prisma.Decimal(balance.locked).minus(amount);
+
+        return walletRepository.updateWalletBalance(tx, balance.id, {
+            available,
+            locked,
+        });
     }
 }
 

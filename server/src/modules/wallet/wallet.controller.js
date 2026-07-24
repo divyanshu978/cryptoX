@@ -34,6 +34,7 @@ class WalletController {
             });
 
         } catch (error) {
+            
             next(error);
         }
     }
