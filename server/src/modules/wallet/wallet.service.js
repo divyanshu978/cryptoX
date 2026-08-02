@@ -89,63 +89,63 @@ class WalletService {
      */
     async withdraw(userId, symbol, amount) {
 
-    if (!amount || Number(amount) <= 0) {
-        throw new Error("Invalid amount");
-    }
+        if (!amount || Number(amount) <= 0) {
+            throw new Error("Invalid amount");
+        }
 
-    const wallet = await walletRepository.findWalletByUserId(userId);
+        const wallet = await walletRepository.findWalletByUserId(userId);
 
-    if (!wallet) {
-        throw new Error("Wallet not found");
-    }
+        if (!wallet) {
+            throw new Error("Wallet not found");
+        }
 
-    const asset = await walletRepository.findAssetBySymbol(symbol);
+        const asset = await walletRepository.findAssetBySymbol(symbol);
 
-    if (!asset) {
-        throw new Error("Asset not found");
-    }
+        if (!asset) {
+            throw new Error("Asset not found");
+        }
 
-    return prisma.$transaction(async (tx) => {
+        return prisma.$transaction(async (tx) => {
 
-        const previousBalance = await this.getBalance(
-            tx,
-            wallet.id,
-            asset.id
-        );
+            const previousBalance = await this.getBalance(
+                tx,
+                wallet.id,
+                asset.id
+            );
 
-        const updatedBalance = await this.debitBalance(
-            tx,
-            wallet.id,
-            asset.id,
-            amount
-        );
+            const updatedBalance = await this.debitBalance(
+                tx,
+                wallet.id,
+                asset.id,
+                amount
+            );
 
-        await walletRepository.createTransaction(tx, {
-            walletId: wallet.id,
-            assetId: asset.id,
+            await walletRepository.createTransaction(tx, {
+                walletId: wallet.id,
+                assetId: asset.id,
 
-            type: "WITHDRAW",
-            status: "SUCCESS",
+                type: "WITHDRAW",
+                status: "SUCCESS",
 
-            amount: new Prisma.Decimal(amount),
+                amount: new Prisma.Decimal(amount),
 
-            balanceBefore: previousBalance.available,
-            balanceAfter: updatedBalance.available,
+                balanceBefore: previousBalance.available,
+                balanceAfter: updatedBalance.available,
 
-            referenceType: "SYSTEM",
+                referenceType: "SYSTEM",
 
-            description: "Manual Withdrawal"
+                description: "Manual Withdrawal"
+            });
+
+            return {
+                asset: asset.symbol,
+                available: updatedBalance.available,
+                locked: updatedBalance.locked
+            };
+
         });
 
-        return {
-            asset: asset.symbol,
-            available: updatedBalance.available,
-            locked: updatedBalance.locked
-        };
-
-    });
-
-}
+    }
 
     /**
      * Get Wallet Balance
@@ -271,6 +271,43 @@ class WalletService {
             locked,
         });
     }
+    async consumeLockedBalance(tx, walletId, assetId, amount) {
+
+        const walletBalance = await tx.walletBalance.findUnique({
+            where: {
+                walletId_assetId: {
+                    walletId,
+                    assetId
+                }
+            }
+        });
+
+        if (!walletBalance) {
+            throw new Error("Wallet balance not found");
+        }
+
+        const locked = new Prisma.Decimal(walletBalance.locked);
+        const consumeAmount = new Prisma.Decimal(amount);
+
+        if (locked.lessThan(consumeAmount)) {
+            throw new Error("Insufficient locked balance");
+        }
+
+        const updatedWalletBalance = await tx.walletBalance.update({
+            where: {
+                walletId_assetId: {
+                    walletId,
+                    assetId
+                }
+            },
+            data: {
+                locked: locked.minus(consumeAmount)
+            }
+        });
+
+        return updatedWalletBalance;
+    }
+
 }
 
 export default new WalletService();
