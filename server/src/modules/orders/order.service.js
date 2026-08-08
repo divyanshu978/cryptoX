@@ -1,9 +1,15 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../../config/prisma.js";
+
 import orderRepository from "./order.repository.js";
+import walletRepository from "../wallet/wallet.repository.js";
 import walletService from "../wallet/wallet.service.js";
-import { calculateLockAmount, lockAsset } from "./order.utils.js";
-import walletService from "../wallet/wallet.service.js";
+import matchingService from "../matching/matching.service.js";
+
+import {
+    calculateLockAmount,
+    getLockAsset
+} from "./order.utils.js";
 
 class OrderService {
 
@@ -17,6 +23,10 @@ class OrderService {
             quantity
         } = payload;
 
+        //---------------------------------
+        // Validation
+        //---------------------------------
+
         if (!pair || !side || !type || !quantity) {
             throw new Error("Missing required fields");
         }
@@ -25,9 +35,17 @@ class OrderService {
             throw new Error("Invalid quantity");
         }
 
-        if (type === "LIMIT" && Number(price) <= 0) {
-            throw new Error("Invalid price");
+        if (type === "LIMIT") {
+
+            if (!price || Number(price) <= 0) {
+                throw new Error("Invalid price");
+            }
+
         }
+
+        //---------------------------------
+        // Trading Pair
+        //---------------------------------
 
         const tradingPair =
             await orderRepository.findTradingPairBySymbol(pair);
@@ -36,16 +54,9 @@ class OrderService {
             throw new Error("Trading pair not found");
         }
 
-        const lockAmount = calculateLockAmount(
-            side,
-            price,
-            quantity
-        );
-
-        const lockAsset = getLockAsset(
-            side,
-            tradingPair
-        );
+        //---------------------------------
+        // Wallet
+        //---------------------------------
 
         const wallet =
             await walletRepository.findWalletByUserId(userId);
@@ -54,48 +65,164 @@ class OrderService {
             throw new Error("Wallet not found");
         }
 
-        await walletService.lockBalance(
-            tx,
-            wallet.id,
-            lockAsset.id,
-            lockAmount
-        );
+        //---------------------------------
+        // Lock Information
+        //---------------------------------
 
-        const order = await orderRepository.createOrder(
-            tx,
-            {
-                userId,
-
-                tradingPairId: tradingPair.id,
-
+        const lockAmount =
+            calculateLockAmount(
                 side,
+                price,
+                quantity
+            );
 
-                type,
+        const asset =
+            getLockAsset(
+                side,
+                tradingPair
+            );
 
-                status: "OPEN",
+        //---------------------------------
+        // Transaction
+        //---------------------------------
 
-                price: new Prisma.Decimal(price),
+        const order = await prisma.$transaction(async (tx) => {
 
-                quantity: new Prisma.Decimal(quantity),
+            await walletService.lockBalance(
+                tx,
+                wallet.id,
+                asset.id,
+                lockAmount
+            );
 
-                filledQuantity: new Prisma.Decimal(0),
+            const createdOrder =
+                await orderRepository.createOrder(
+                    tx,
+                    {
+                        userId,
 
-                remainingQuantity: new Prisma.Decimal(quantity)
-            }
-        );
+                        tradingPairId: tradingPair.id,
 
-        return order;
+                        side,
+
+                        type,
+
+                        status: "OPEN",
+
+                        price: new Prisma.Decimal(price),
+
+                        quantity: new Prisma.Decimal(quantity),
+
+                        filledQuantity: new Prisma.Decimal(0),
+
+                        remainingQuantity: new Prisma.Decimal(quantity)
+                    }
+                );
+
+            return createdOrder;
+
+        });
+
+        //---------------------------------
+        // Start Matching Engine
+        //---------------------------------
+
+        await matchingService.match(order.id);
+
+        return await orderRepository.findOrderById(order.id);
+
     }
 
-    async cancelOrder(userId, orderId) {
+    async cancelOrder(orderId, userId) {
+
+        const order =
+            await orderRepository.findOrderById(orderId);
+
+        if (!order) {
+            throw new Error("Order not found");
+        }
+
+        if (order.userId !== userId) {
+            throw new Error("Unauthorized");
+        }
+
+        if (
+            order.status === "FILLED" ||
+            order.status === "CANCELLED"
+        ) {
+            throw new Error(
+                `Cannot cancel ${order.status.toLowerCase()} order`
+            );
+        }
+
+        return await prisma.$transaction(async (tx) => {
+
+            const walletId = order.user.wallet.id;
+
+            if (order.side === "BUY") {
+
+                const unlockAmount =
+                    new Prisma.Decimal(order.remainingQuantity)
+                        .mul(order.price);
+
+                await walletService.unlockBalance(
+                    tx,
+                    walletId,
+                    order.tradingPair.quoteAssetId,
+                    unlockAmount
+                );
+
+            } else {
+
+                await walletService.unlockBalance(
+                    tx,
+                    walletId,
+                    order.tradingPair.baseAssetId,
+                    order.remainingQuantity
+                );
+
+            }
+
+            return await orderRepository.updateOrder(
+                tx,
+                order.id,
+                {
+                    status: "CANCELLED"
+                }
+            );
+
+        });
 
     }
 
     async getOrders(userId) {
 
+        return await orderRepository.findOrdersByUser(userId);
+
     }
 
     async getOrder(orderId) {
+
+        const order =
+            await orderRepository.findOrderById(orderId);
+
+        if (!order) {
+            throw new Error("Order not found");
+        }
+
+        return order;
+
+    }
+
+    async getOpenOrders(userId) {
+
+        return await orderRepository.findOpenOrders(userId);
+
+    }
+
+    async getOrderHistory(userId) {
+
+        return await orderRepository.findOrderHistory(userId);
 
     }
 
