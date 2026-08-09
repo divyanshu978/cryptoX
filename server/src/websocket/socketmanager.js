@@ -1,4 +1,4 @@
-import { getIO } from "./socket.js";
+import { getIO } from "./socket.server.js";
 
 class SocketManager {
 

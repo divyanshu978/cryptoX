@@ -1,4 +1,4 @@
-import { initializeSocket } from "./socket.js";
+import { initializeSocket } from "./socket.server.js";
 import socketManager from "./socketManager.js";
 
 export const initializeWebSocket = (httpServer) => {
