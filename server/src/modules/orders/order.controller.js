@@ -1,4 +1,5 @@
 import orderService from "./order.service.js";
+import { Prisma } from "@prisma/client";
 
 class OrderController {
 
@@ -148,7 +149,7 @@ class OrderController {
         }
 
     }
-
 }
+
 
 export default new OrderController();

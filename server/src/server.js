@@ -1,7 +1,21 @@
 import app from "./app.js";
+import http from "http"
 
 const PORT = 4000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+import { initializeWebSocket } from "./websocket/index.js";
+import { initializeSubscribers } from "./events/subscribers/index.js";
+
+const httpServer = http.createServer(app);
+
+initializeWebSocket(httpServer);
+
+initializeSubscribers();
+
+httpServer.listen(5000, () => {
+
+    console.log(
+        "Server running on port 5000"
+    );
+
 });

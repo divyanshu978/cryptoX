@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import { Prisma } from "@prisma/client";
 
 class OrderRepository {
 
@@ -222,6 +223,43 @@ class OrderRepository {
             }
         });
     }
+
+    async findOpenBuyOrders(tradingPairId) {
+
+    return prisma.order.findMany({
+        where: {
+            tradingPairId,
+            side: "BUY",
+            status: "OPEN",
+            remainingQuantity: {
+                gt: 0
+            }
+        },
+
+        orderBy: {
+            price: "desc"
+        }
+    });
+}
+
+
+async findOpenSellOrders(tradingPairId) {
+
+    return prisma.order.findMany({
+        where: {
+            tradingPairId,
+            side: "SELL",
+            status: "OPEN",
+            remainingQuantity: {
+                gt: 0
+            }
+        },
+
+        orderBy: {
+            price: "asc"
+        }
+    });
+}
 
 }
 

@@ -1,5 +1,7 @@
 import prisma from "../../config/prisma.js";
-import orderRepository from "../order/order.repository.js";
+import orderRepository from "../orders/order.repository.js";
+import { Prisma } from "@prisma/client";
+import tradeService from "../trade/trade.service.js";
 
 class MatchingService {
 

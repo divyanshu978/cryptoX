@@ -4,7 +4,7 @@ import prisma from "../../config/prisma.js";
 import orderRepository from "./order.repository.js";
 import walletRepository from "../wallet/wallet.repository.js";
 import walletService from "../wallet/wallet.service.js";
-import matchingService from "../matching/matching.service.js";
+import matchingService from "../matching-engine/matching.service.js";
 
 import {
     calculateLockAmount,
@@ -100,6 +100,8 @@ class OrderService {
                     tx,
                     {
                         userId,
+
+                        walletId: wallet.id,
 
                         tradingPairId: tradingPair.id,
 
