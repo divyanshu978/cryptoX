@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import walletService from "../wallet/wallet.service.js";
 import tradeRepository from "./trade.repository.js";
+import marketPublisher from "../websocket/market.publisher.js";
 
 class TradeService {
 

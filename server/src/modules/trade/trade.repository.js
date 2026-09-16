@@ -3,10 +3,16 @@ import prisma from "../../config/prisma.js";
 class TradeRepository {
 
     async createTrade(tx, data) {
-        return tx.trade.create({
-            data
-        });
-    }
+
+    return tx.trade.create({
+
+        data,
+
+        include: {
+            tradingPair: true
+        }
+    });
+}
 
     async getTradeById(id) {
         return prisma.trade.findUnique({

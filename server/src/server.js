@@ -3,7 +3,7 @@ import http from "http"
 
 const PORT = 4000;
 
-import { initializeWebSocket } from "./websocket/index.js";
+import { initializeWebSocket } from "./modules/websocket/index.js";
 import { initializeSubscribers } from "./events/subscribers/index.js";
 
 const httpServer = http.createServer(app);
