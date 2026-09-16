@@ -1,7 +1,7 @@
 import eventBus from "../eventBus.js";
 import EVENTS from "../event.js";
 
-import socketManager from "../../websocket/socketManager.js";
+import socketManager from "../../modules/websocket/socketManager.js";
 
 class MarketSubscriber {
 
