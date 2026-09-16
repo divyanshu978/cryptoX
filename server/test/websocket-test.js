@@ -17,6 +17,17 @@ socket.on("connect", () => {
     );
 });
 
+socket.on(
+    "market:trade",
+    (trade) => {
+
+        console.log(
+            "NEW TRADE:",
+            trade
+        );
+
+    }
+);
 
 socket.on(
     "market:subscribed",
